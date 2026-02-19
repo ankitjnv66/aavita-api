@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: aavita-api
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/AavitaDB
+    username:
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: public
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: 9090
+
+jwt:
+  key: ${JWT_KEY:m7H2qPa91F/9p8q7o9KDfF3hB+8mNh2Wmcb1K3qj1BQ=}
+  issuers:
+    - "http://167.71.236.177:5000"
+    - "http://167.71.236.177:8080"
+    - "http://localhost:5000"
+  audiences:
+    - "http://167.71.236.177:5000"
+    - "http://167.71.236.177:8080"
+    - "http://localhost:5000"
+  expiration-hours: 3
+
+mqtt:
+  enabled: false
+  broker: tcp://localhost:1883
+  client-id: JavaClient
+  subscribe-topic: "+/+/sub"
+
+logging:
+  level:
+    root: INFO
+    com.aavita: INFO
+    org.springframework.security: WARN
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
