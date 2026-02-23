@@ -25,31 +25,31 @@ public class DeviceCommandPublisher {
     private final MqttService mqttService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public String buildAndPublish(DeviceCommandRequest req) {
-        if (req.getSiteId() == null) {
+    public String buildAndPublish(DeviceCommandRequest request) {
+        if (request.getSiteId() == null) {
             throw new IllegalArgumentException("SiteId is required");
         }
 
-        Device device = deviceRepository.findById(req.getDeviceId())
-                .orElseThrow(() -> new IllegalArgumentException("Device with Id " + req.getDeviceId() + " not found"));
+        Device device = deviceRepository.findById(request.getDeviceId())
+                .orElseThrow(() -> new IllegalArgumentException("Device with Id " + request.getDeviceId() + " not found"));
 
-        if (req.getPayload() == null || req.getPayload().isBlank()) {
+        if (request.getPayload() == null || request.getPayload().isBlank()) {
             throw new IllegalArgumentException("Payload is required");
         }
 
         com.aavita.mqtt.model.DevicePayload payload;
-        String command = req.getCommand().toUpperCase();
+        String command = request.getCommand().toUpperCase();
         switch (command) {
-            case "SET_PIN" -> payload = buildPinCommand(req.getPayload(), device);
-            case "SET_PWM" -> payload = buildPwmCommand(req.getPayload(), device);
-            default -> throw new IllegalArgumentException("Unknown command: " + req.getCommand());
+            case "SET_PIN" -> payload = buildPinCommand(request.getPayload(), device);
+            case "SET_PWM" -> payload = buildPwmCommand(request.getPayload(), device);
+            default -> throw new IllegalArgumentException("Unknown command: " + request.getCommand());
         }
 
         try {
             String payloadJson = objectMapper.writeValueAsString(payload);
             String base64 = Base64.getEncoder().encodeToString(payloadJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            String json = jsonBuilder.build(req.getSiteId(), base64);
-            String topic = req.getUsername() + "/" + req.getSiteId() + "/pub";
+            String json = jsonBuilder.build(request.getSiteId(), base64);
+            String topic = request.getUsername() + "/" + request.getSiteId() + "/pub";
             mqttService.publish(topic, json, 0, false);
             return json;
         } catch (Exception ex) {

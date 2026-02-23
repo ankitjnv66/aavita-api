@@ -36,11 +36,13 @@ public class DeviceCommandService {
         Device device = deviceRepository.findByIdAndSite_SiteId(request.getDeviceId(), request.getSiteId())
                 .orElseThrow(() -> new IllegalArgumentException("Device not found"));
 
-        Site site = siteRepository.findById(device.getSite().getSiteId())
+        final UUID siteId = device.getSite().getSiteId();
+
+        Site site = siteRepository.findById(siteId)
                 .orElseThrow(() -> new IllegalArgumentException("Site not found"));
 
         request.setUsername(site.getUsername());
-        request.setSiteId(device.getSite().getSiteId());
+        request.setSiteId(siteId);
 
         String payloadJson = deviceCommandPublisher.buildAndPublish(request);
 
