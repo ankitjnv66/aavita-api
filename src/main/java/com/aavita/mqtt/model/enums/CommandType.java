@@ -1,5 +1,8 @@
 package com.aavita.mqtt.model.enums;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 public enum CommandType {
     Action(1),
     Status(2),
@@ -12,8 +15,18 @@ public enum CommandType {
     CommandType(int value) {
         this.value = value;
     }
-
+    @JsonValue
     public int getValue() {
         return value;
+    }
+
+    @JsonCreator
+    public static CommandType fromCode(int value) {
+        for (CommandType type : values()) {
+            if (type.value == value) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Invalid CommandType code: " + value);
     }
 }

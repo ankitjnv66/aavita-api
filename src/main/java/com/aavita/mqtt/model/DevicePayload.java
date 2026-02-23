@@ -12,10 +12,10 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class DevicePayload {
 
-    @JsonProperty("routingData")
+    @JsonProperty("RoutingData")
     private RoutingData routingData;
 
-    @JsonProperty("payloadData")
+    @JsonProperty("PayloadData")
     private PayloadData payloadData;
 
     public RoutingData getRoutingData() { return routingData; }
