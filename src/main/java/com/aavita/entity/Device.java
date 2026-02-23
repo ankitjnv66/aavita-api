@@ -3,9 +3,7 @@ package com.aavita.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "devices")
@@ -75,11 +73,11 @@ public class Device {
 
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private List<DeviceDigitalPin> digitalPins = new ArrayList<>();
+    private Set<DeviceDigitalPin> digitalPins = new HashSet<>();
 
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private List<DevicePwmPin> pwmPins = new ArrayList<>();
+    private Set<DevicePwmPin> pwmPins = new HashSet<>();
 
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL)
     @Builder.Default
@@ -99,8 +97,8 @@ public class Device {
     }
 
     public Site getSite() { return site; }
-    public List<DeviceDigitalPin> getDigitalPins() { return digitalPins; }
-    public List<DevicePwmPin> getPwmPins() { return pwmPins; }
+    public Set<DeviceDigitalPin> getDigitalPins() { return digitalPins; }
+    public Set<DevicePwmPin> getPwmPins() { return pwmPins; }
     public Integer getLastPktType() { return lastPktType; }
     public String getMeshId() { return meshId; }
     public String getSrcMac() { return srcMac; }

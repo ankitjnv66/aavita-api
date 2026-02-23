@@ -37,7 +37,7 @@ jwt:
   expiration-hours: 3
 
 mqtt:
-  enabled: false
+  enabled: true
   broker: tcp://localhost:1883
   client-id: JavaClient
   subscribe-topic: "+/+/sub"
