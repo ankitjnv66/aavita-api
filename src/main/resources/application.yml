@@ -36,13 +36,18 @@ jwt:
     - "http://localhost:5000"
   expiration-hours: 3
 
+#google:
+#  smarthome:
+#    # Get this from Google Actions Console → Project Settings → Client ID
+#    client-id: ${GOOGLE_SMARTHOME_CLIENT_ID:your-google-client-id-here}
+#
+#    # A strong secret string — must match what you enter in Developer Console
+#    client-secret: ${GOOGLE_SMARTHOME_CLIENT_SECRET:your-strong-secret-here}
+
 google:
   smarthome:
-    # Get this from Google Actions Console → Project Settings → Client ID
-    client-id: ${GOOGLE_SMARTHOME_CLIENT_ID:your-google-client-id-here}
-
-    # A strong secret string — must match what you enter in Developer Console
-    client-secret: ${GOOGLE_SMARTHOME_CLIENT_SECRET:your-strong-secret-here}
+    client-id: smarthome-client-001
+    client-secret: Aavita@Smart#2026
 
 
 mqtt:

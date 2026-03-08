@@ -29,6 +29,7 @@ public class SecurityConfig {
                                 "/api/auth/reset-password", "/api/users/test").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/oauth/**").permitAll()
 
                         // --- Google Smart Home fulfillment ---
                         // Permitted here because Google sends its OWN OAuth token,
