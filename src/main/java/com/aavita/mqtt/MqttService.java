@@ -4,10 +4,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.eclipse.paho.client.mqttv3.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
 
 @Service
 public class MqttService implements MqttCallback {
@@ -19,6 +24,12 @@ public class MqttService implements MqttCallback {
 
     @Value("${mqtt.client-id:JavaClient}")
     private String clientId;
+
+    @Value("${mqtt.tls.truststore:#{null}}")
+    private Resource truststore;
+
+    @Value("${mqtt.tls.truststore-password:#{null}}")
+    private String truststorePassword;
 
     private MqttClient client;
     private volatile boolean manualDisconnect = false;
@@ -49,8 +60,34 @@ public class MqttService implements MqttCallback {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setCleanSession(true);
         options.setAutomaticReconnect(true);
+
+        // Add TLS if truststore is configured
+        if (truststore != null && broker.startsWith("ssl://")) {
+            try {
+                options.setSocketFactory(createSslSocketFactory());
+                log.info("MQTT TLS enabled using truststore");
+            } catch (Exception e) {
+                log.error("Failed to configure TLS for MQTT", e);
+                throw new MqttException(MqttException.REASON_CODE_BROKER_UNAVAILABLE);
+            }
+        }
+
         client.connect(options);
         log.info("MQTT client connected successfully");
+    }
+
+    private javax.net.ssl.SSLSocketFactory createSslSocketFactory() throws Exception {
+        KeyStore ks = KeyStore.getInstance("JKS");
+        try (InputStream is = truststore.getInputStream()) {
+            ks.load(is, truststorePassword.toCharArray());
+        }
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+                TrustManagerFactory.getDefaultAlgorithm()
+        );
+        tmf.init(ks);
+        SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+        sslContext.init(null, tmf.getTrustManagers(), null);
+        return sslContext.getSocketFactory();
     }
 
     @PreDestroy

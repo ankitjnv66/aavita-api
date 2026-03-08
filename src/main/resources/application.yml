@@ -49,12 +49,22 @@ google:
     client-id: smarthome-client-001
     client-secret: Aavita@Smart#2026
 
+#Without TLS
+#mqtt:
+#  enabled: true
+#  broker: tcp://localhost:1883
+#  client-id: JavaClient
+#  subscribe-topic: "+/+/sub"
 
+#With TLS
 mqtt:
   enabled: true
-  broker: tcp://localhost:1883
+  broker: ssl://localhost:8883
   client-id: JavaClient
   subscribe-topic: "+/+/sub"
+  tls:
+    truststore: classpath:certs/aavita-truststore.jks
+    truststore-password: aavita123
 
 logging:
   level:
