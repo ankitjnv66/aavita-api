@@ -1,0 +1,25 @@
+# Maven
+target/
+*.class
+
+# Spring Boot
+application-local.yml
+application-prod.yml
+
+# Certificate private keys - NEVER commit!
+src/main/resources/certs/*.key
+src/main/resources/certs/*.pem
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+*.env

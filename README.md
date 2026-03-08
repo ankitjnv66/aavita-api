@@ -63,3 +63,57 @@ http://localhost:5000/swagger-ui.html
 - **Flyway**: Uses `baseline-on-migrate: true` - if DB has existing schema, Flyway will baseline.
 - **Password**: Uses BCrypt (different from original C# SHA256). Existing users need password reset.
 - **MQTT**: Connects on startup, subscribes to `+/+/sub`, processes device packets.
+
+## local steps fot testing
+What You Need Running Every Time You Test
+ServiceKeep Running?How to StartPostgreSQL✅ YesUsually auto-starts with your MacMosquitto MQTT✅ Yesbrew services start mosquittoSpring Boot✅ Yesmvn spring-boot:runngrok✅ Yesngrok http 9090
+
+⚠️ The ngrok Problem for Tomorrow
+Every time you restart ngrok, you get a new URL. So tomorrow:
+
+Start ngrok → get new URL e.g. https://xyz999.ngrok-free.app
+Go to Google Home Developer Console
+Update all 3 URLs with the new ngrok URL:
+
+Authorization URL
+Token URL
+Cloud Fulfillment URL
+
+
+Click Save
+Then test again
+
+
+💡 Permanent Solution (When Ready for Production)
+When you deploy to a real server, you'll have a fixed HTTPS URL and won't need ngrok at all. Then you only update Google Console once permanently.
+
+📋 Tomorrow's Startup Checklist
+Save this for tomorrow:
+1. mvn spring-boot:run          ← start app
+2. ngrok http 9090              ← start tunnel
+3. Copy new ngrok URL
+4. Update Google Console URLs   ← paste new URL
+5. Test in Google Home app
+
+See you tomorrow! Everything is saved in this conversation. Just say "I'm back" and we'll continue! 👋
+
+## below steps
+Step 1 → Start PostgreSQL (usually auto-running)
+Step 2 → brew services start mosquitto
+Step 3 → mvn spring-boot:run
+Step 4 → ngrok http 9090  (new URL will appear)
+Step 5 → Update Google Console with new ngrok URL
+Step 6 → Test!
+
+
+## Google Developer update
+What To Update in Google Console (When URL Changes)
+If tomorrow you get a different URL, go to:
+
+👉 console.home.google.com
+Open project → Cloud-to-cloud → Develop
+Click on Aavita Smart Home → Edit
+Update these 3 fields only:
+
+FieldNew ValueAuthorization URLhttps://NEW-URL/oauth/authorizeToken URLhttps://NEW-URL/oauth/tokenCloud Fulfillment URLhttps://NEW-URL/api/google/fulfillment
+
