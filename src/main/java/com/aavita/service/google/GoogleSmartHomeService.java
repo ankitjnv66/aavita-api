@@ -1,5 +1,6 @@
 package com.aavita.service.google;
 
+import com.aavita.service.LightService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -7,28 +8,22 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 
 /**
- * Core service handling all three Google Smart Home intents:
+ * GoogleSmartHomeService — Fully wired with LightService.
+ * Handles SYNC, QUERY, EXECUTE intents from Google Smart Home.
  *
- *  - SYNC    → Tell Google what devices you have
- *  - QUERY   → Return current state of devices
- *  - EXECUTE → Perform commands on devices
- *
- * Wire your existing LightService and ThermostatService below.
+ * Device ID convention:
+ *   Google device ID "light-{dbId}" maps to Device.id in your DB
+ *   e.g. "light-42" → Device with id=42
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class GoogleSmartHomeService {
 
-    // ---------------------------------------------------------------
-    // TODO: Replace these with your actual service injections
-    // Example:
-    //   private final LightService lightService;
-    //   private final ThermostatService thermostatService;
-    // ---------------------------------------------------------------
+    private final LightService lightService;
 
     // =================================================================
-    // INTENT 1: SYNC — Tell Google what devices exist in your system
+    // INTENT 1: SYNC — Tell Google what light devices exist
     // =================================================================
     public Map<String, Object> handleSync(String requestId) {
         log.info("Handling SYNC for requestId: {}", requestId);
@@ -36,47 +31,40 @@ public class GoogleSmartHomeService {
         List<Map<String, Object>> devices = new ArrayList<>();
 
         // ----- LIGHT DEVICE -----
+        // TODO: Replace hardcoded device with a DB query to fetch all
+        //       light-type devices for the authenticated user.
+        // Example:
+        //   List<Device> lights = deviceRepository.findByUserIdAndDeviceType(userId, LIGHT_TYPE);
+        //   for (Device d : lights) { ... add to devices list ... }
+
         Map<String, Object> light = new HashMap<>();
-        light.put("id", "light-001");                                   // Must be unique & stable
+        light.put("id", "light-1");                         // Format: "light-{Device.id}"
         light.put("type", "action.devices.types.LIGHT");
         light.put("traits", List.of(
                 "action.devices.traits.OnOff",
-                "action.devices.traits.Brightness"
+                "action.devices.traits.Brightness",
+                "action.devices.traits.ColorSetting"        // Added for color temperature
         ));
         light.put("name", Map.of(
-                "name", "Living Room Light",                            // Shown in Google Home app
-                "nicknames", List.of("living room", "main light")
+                "name", "Smart Light",
+                "nicknames", List.of("main light", "room light")
         ));
-        light.put("willReportState", false);                            // Set true if using Report State API
+        light.put("willReportState", false);
         light.put("roomHint", "Living Room");
         light.put("attributes", Map.of(
-                "commandOnlyBrightness", false
+                "commandOnlyBrightness", false,
+                "colorModel", "temp",                       // Color temperature mode
+                "colorTemperatureRange", Map.of(
+                        "temperatureMinK", 2000,
+                        "temperatureMaxK", 6500
+                )
         ));
         devices.add(light);
-
-        // ----- THERMOSTAT DEVICE -----
-        Map<String, Object> thermostat = new HashMap<>();
-        thermostat.put("id", "thermostat-001");
-        thermostat.put("type", "action.devices.types.THERMOSTAT");
-        thermostat.put("traits", List.of(
-                "action.devices.traits.TemperatureSetting"
-        ));
-        thermostat.put("name", Map.of(
-                "name", "Main Thermostat",
-                "nicknames", List.of("thermostat", "AC", "heater")
-        ));
-        thermostat.put("willReportState", false);
-        thermostat.put("roomHint", "Living Room");
-        thermostat.put("attributes", Map.of(
-                "availableThermostatModes", List.of("off", "heat", "cool", "auto"),
-                "thermostatTemperatureUnit", "CELSIUS"
-        ));
-        devices.add(thermostat);
 
         return Map.of(
                 "requestId", requestId,
                 "payload", Map.of(
-                        "agentUserId", "user-001",          // Unique ID for the user in your system
+                        "agentUserId", "user-001",          // TODO: use real authenticated userId
                         "devices", devices
                 )
         );
@@ -88,7 +76,7 @@ public class GoogleSmartHomeService {
     public Map<String, Object> handleQuery(String requestId, List<Map<String, Object>> inputs) {
         log.info("Handling QUERY for requestId: {}", requestId);
 
-        Map<String, Object> payload = (Map<String, Object>) inputs.get(0).get("payload");
+        Map<String, Object> payload   = (Map<String, Object>) inputs.get(0).get("payload");
         List<Map<String, Object>> requestedDevices = (List<Map<String, Object>>) payload.get("devices");
 
         Map<String, Object> deviceStates = new HashMap<>();
@@ -104,7 +92,7 @@ public class GoogleSmartHomeService {
     }
 
     // =================================================================
-    // INTENT 3: EXECUTE — Perform a command on one or more devices
+    // INTENT 3: EXECUTE — Perform commands on devices
     // =================================================================
     public Map<String, Object> handleExecute(String requestId, List<Map<String, Object>> inputs) {
         log.info("Handling EXECUTE for requestId: {}", requestId);
@@ -128,15 +116,15 @@ public class GoogleSmartHomeService {
                     try {
                         executeCommand(deviceId, cmdName, params);
                         results.add(Map.of(
-                                "ids", List.of(deviceId),
+                                "ids",    List.of(deviceId),
                                 "status", "SUCCESS",
                                 "states", getCurrentState(deviceId)
                         ));
                     } catch (Exception e) {
                         log.error("Execute failed for device {} command {}: {}", deviceId, cmdName, e.getMessage());
                         results.add(Map.of(
-                                "ids", List.of(deviceId),
-                                "status", "ERROR",
+                                "ids",       List.of(deviceId),
+                                "status",    "ERROR",
                                 "errorCode", "hardError"
                         ));
                     }
@@ -155,74 +143,64 @@ public class GoogleSmartHomeService {
     // =================================================================
 
     /**
-     * Returns the current state of a device.
-     * TODO: Replace stub calls with your actual service calls.
-     *
-     * Example replacement:
-     *   if (deviceId.startsWith("light")) {
-     *       return Map.of(
-     *           "on",         lightService.isOn(deviceId),
-     *           "brightness", lightService.getBrightness(deviceId),
-     *           "online",     true
-     *       );
-     *   }
+     * Fetches real-time device state from DB via LightService.
      */
     private Map<String, Object> getCurrentState(String deviceId) {
         if (deviceId.startsWith("light")) {
             return new HashMap<>(Map.of(
-                    "online",     true,
-                    "on",         false,          // TODO: lightService.isOn(deviceId)
-                    "brightness", 100             // TODO: lightService.getBrightness(deviceId)
-            ));
-        } else if (deviceId.startsWith("thermostat")) {
-            return new HashMap<>(Map.of(
-                    "online",                          true,
-                    "thermostatMode",                  "cool",   // TODO: thermostatService.getMode(deviceId)
-                    "thermostatTemperatureSetpoint",   24.0,     // TODO: thermostatService.getSetpoint(deviceId)
-                    "thermostatTemperatureAmbient",    26.0      // TODO: thermostatService.getAmbient(deviceId)
+                    "online",      true,
+                    "on",          lightService.isOn(deviceId),
+                    "brightness",  lightService.getBrightness(deviceId),
+                    "colorTemperatureK", kelvinFromPercent(lightService.getColorTemperature(deviceId))
             ));
         }
         return Map.of("online", false);
     }
 
     /**
-     * Dispatches a Google command to your device services.
-     * TODO: Replace stub calls with your actual service calls.
-     *
-     * Example replacement:
-     *   case "action.devices.commands.OnOff" ->
-     *       lightService.setOnOff(deviceId, (Boolean) params.get("on"));
+     * Routes Google commands to LightService methods.
      */
     private void executeCommand(String deviceId, String command, Map<String, Object> params) {
         log.info("Executing command: {} on device: {} with params: {}", command, deviceId, params);
 
         switch (command) {
 
-            // --- Light commands ---
             case "action.devices.commands.OnOff" -> {
                 boolean on = (Boolean) params.get("on");
-                // TODO: lightService.setOnOff(deviceId, on);
-                log.info("Light {} turned {}", deviceId, on ? "ON" : "OFF");
-            }
-            case "action.devices.commands.BrightnessAbsolute" -> {
-                int brightness = (Integer) params.get("brightness");
-                // TODO: lightService.setBrightness(deviceId, brightness);
-                log.info("Light {} brightness set to {}%", deviceId, brightness);
+                lightService.setOnOff(deviceId, on);
             }
 
-            // --- Thermostat commands ---
-            case "action.devices.commands.ThermostatTemperatureSetpoint" -> {
-                double temp = ((Number) params.get("thermostatTemperatureSetpoint")).doubleValue();
-                // TODO: thermostatService.setTemperature(deviceId, temp);
-                log.info("Thermostat {} setpoint set to {}°C", deviceId, temp);
+            case "action.devices.commands.BrightnessAbsolute" -> {
+                int brightness = ((Number) params.get("brightness")).intValue();
+                lightService.setBrightness(deviceId, brightness);
             }
-            case "action.devices.commands.ThermostatSetMode" -> {
-                String mode = (String) params.get("thermostatMode");
-                // TODO: thermostatService.setMode(deviceId, mode);
-                log.info("Thermostat {} mode set to {}", deviceId, mode);
+
+            case "action.devices.commands.ColorAbsolute" -> {
+                // Google sends color temperature in Kelvin (2000K-6500K)
+                Map<String, Object> color = (Map<String, Object>) params.get("color");
+                if (color != null && color.containsKey("temperature")) {
+                    int kelvin = ((Number) color.get("temperature")).intValue();
+                    int percent = percentFromKelvin(kelvin);
+                    lightService.setColorTemperature(deviceId, percent);
+                }
             }
 
             default -> log.warn("Unhandled command: {} for device: {}", command, deviceId);
         }
+    }
+
+    /**
+     * Converts Kelvin (2000-6500) to 0-100% for PWM storage.
+     */
+    private int percentFromKelvin(int kelvin) {
+        int clamped = Math.max(2000, Math.min(6500, kelvin));
+        return (int) Math.round((clamped - 2000.0) / (6500.0 - 2000.0) * 100);
+    }
+
+    /**
+     * Converts 0-100% back to Kelvin for Google's response.
+     */
+    private int kelvinFromPercent(int percent) {
+        return (int) Math.round(2000 + (percent / 100.0) * (6500 - 2000));
     }
 }
