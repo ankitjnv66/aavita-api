@@ -85,4 +85,40 @@ public class HomeGraphReportService {
             log.error("Failed to report state to HomeGraph for device: {}", deviceId, e);
         }
     }
+
+    public void reportThermostatState(String deviceId, boolean on, double temperatureCelsius) {
+        try {
+            Map<String, Object> state = new HashMap<>();
+            state.put("on", on);
+            state.put("thermostatMode", on ? "heat" : "off");
+            state.put("thermostatTemperatureSetpoint", temperatureCelsius);
+            state.put("thermostatTemperatureAmbient", temperatureCelsius);
+            state.put("online", true);
+
+            Map<String, Object> states = new HashMap<>();
+            states.put(deviceId, state);
+
+            ReportStateAndNotificationDevice devicesPayload = new ReportStateAndNotificationDevice();
+            devicesPayload.setStates(states);
+
+            StateAndNotificationPayload payload = new StateAndNotificationPayload();
+            payload.setDevices(devicesPayload);
+
+            ReportStateAndNotificationRequest request = new ReportStateAndNotificationRequest();
+            request.setRequestId(UUID.randomUUID().toString());
+            request.setAgentUserId(agentUserId);
+            request.setPayload(payload);
+
+            ReportStateAndNotificationResponse response = homeGraphService
+                    .devices()
+                    .reportStateAndNotification(request)
+                    .execute();
+
+            log.info("HomeGraph thermostat state reported for device: {} on={} temp={}°C | requestId: {}",
+                    deviceId, on, temperatureCelsius, response.getRequestId());
+
+        } catch (Exception e) {
+            log.error("Failed to report thermostat state to HomeGraph for device: {}", deviceId, e);
+        }
+    }
 }
