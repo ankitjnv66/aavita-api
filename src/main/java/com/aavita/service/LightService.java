@@ -2,6 +2,7 @@ package com.aavita.service;
 
 import com.aavita.entity.*;
 import com.aavita.mqtt.MqttService;
+import com.aavita.service.google.HomeGraphReportService;
 import com.aavita.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class LightService {
     private final DeviceCommandRepository    deviceCommandRepository;
     private final MqttService                mqttService;
     private final ObjectMapper               objectMapper;
+    private final HomeGraphReportService     homeGraphReportService;
 
     // Pin number conventions — adjust if your device uses different pin numbers
     private static final byte LIGHT_ONOFF_PIN      = 0;   // Digital pin 0 = ON/OFF
@@ -115,6 +117,7 @@ public class LightService {
         saveDeviceCommand(device, payload);
 
         log.info("LightService: Device {} turned {}", deviceId, on ? "ON" : "OFF");
+        homeGraphReportService.reportState("light-" + id, on, getBrightness(deviceId));
     }
 
     // ----------------------------------------------------------------
@@ -151,6 +154,7 @@ public class LightService {
         saveDeviceCommand(device, payload);
 
         log.info("LightService: Device {} brightness → {}%", deviceId, brightnessPercent);
+        homeGraphReportService.reportState("light-" + id, isOn(deviceId), brightnessPercent);
     }
 
     // ----------------------------------------------------------------
