@@ -48,6 +48,9 @@ google:
   smarthome:
     client-id: smarthome-client-001
     client-secret: Aavita@Smart#2026
+    agent-user-id: user-001
+  homegraph:
+    service-account-key: classpath:certs/homegraph-service-account.json
 
 #Without TLS
 #mqtt:
