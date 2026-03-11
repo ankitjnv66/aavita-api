@@ -1,5 +1,13 @@
 package com.aavita.service.google;
 
+import com.aavita.entity.Device;
+import com.aavita.entity.Site;
+import com.aavita.entity.User;
+import com.aavita.oauth.model.OAuthToken;
+import com.aavita.oauth.repository.OAuthTokenRepository;
+import com.aavita.repository.DeviceRepository;
+import com.aavita.repository.SiteRepository;
+import com.aavita.repository.UserRepository;
 import com.aavita.service.FanService;
 import com.aavita.service.LightService;
 import com.aavita.service.ThermostatService;
@@ -14,87 +22,35 @@ import java.util.*;
 @RequiredArgsConstructor
 public class GoogleSmartHomeService {
 
-    private final LightService      lightService;
-    private final FanService        fanService;
-    private final ThermostatService thermostatService;
+    private final LightService          lightService;
+    private final FanService            fanService;
+    private final ThermostatService     thermostatService;
+    private final DeviceRepository      deviceRepository;
+    private final SiteRepository        siteRepository;
+    private final UserRepository        userRepository;
+    private final OAuthTokenRepository  oAuthTokenRepository;
+
+    // Device type constants
+    private static final byte DEVICE_TYPE_LIGHT      = 1;
+    private static final byte DEVICE_TYPE_FAN        = 2;
+    private static final byte DEVICE_TYPE_THERMOSTAT = 3;
 
     // =================================================================
-    // INTENT 1: SYNC — Tell Google what devices exist
+    // INTENT 1: SYNC — Fetch devices dynamically from DB
     // =================================================================
     public Map<String, Object> handleSync(String requestId) {
         log.info("Handling SYNC for requestId: {}", requestId);
 
-        List<Map<String, Object>> devices = new ArrayList<>();
+        // TODO: Extract userId from JWT/OAuth token when multi-user is needed
+        // For now using default user-001
+        String userId = "user-001";
 
-        // ----- LIGHT -----
-        Map<String, Object> light = new HashMap<>();
-        light.put("id", "light-1");
-        light.put("type", "action.devices.types.LIGHT");
-        light.put("traits", List.of(
-                "action.devices.traits.OnOff",
-                "action.devices.traits.Brightness",
-                "action.devices.traits.ColorSetting"
-        ));
-        light.put("name", Map.of(
-                "name", "Smart Light",
-                "nicknames", List.of("main light", "room light")
-        ));
-        light.put("willReportState", true);
-        light.put("roomHint", "Living Room");
-        light.put("attributes", Map.of(
-                "commandOnlyBrightness", false,
-                "colorModel", "temp",
-                "colorTemperatureRange", Map.of(
-                        "temperatureMinK", 2000,
-                        "temperatureMaxK", 6500
-                )
-        ));
-        devices.add(light);
-
-        // ----- FAN -----
-        Map<String, Object> fan = new HashMap<>();
-        fan.put("id", "fan-2");
-        fan.put("type", "action.devices.types.FAN");
-        fan.put("traits", List.of(
-                "action.devices.traits.OnOff",
-                "action.devices.traits.FanSpeed"
-        ));
-        fan.put("name", Map.of(
-                "name", "Smart Fan",
-                "nicknames", List.of("ceiling fan", "room fan")
-        ));
-        fan.put("willReportState", true);
-        fan.put("roomHint", "Living Room");
-        fan.put("attributes", Map.of(
-                "reversible", false,
-                "supportsFanSpeedPercent", true
-        ));
-        devices.add(fan);
-
-        // ----- THERMOSTAT -----
-        Map<String, Object> thermostat = new HashMap<>();
-        thermostat.put("id", "thermostat-3");
-        thermostat.put("type", "action.devices.types.THERMOSTAT");
-        thermostat.put("traits", List.of(
-                "action.devices.traits.OnOff",
-                "action.devices.traits.TemperatureSetting"
-        ));
-        thermostat.put("name", Map.of(
-                "name", "Smart Thermostat",
-                "nicknames", List.of("thermostat", "ac")
-        ));
-        thermostat.put("willReportState", true);
-        thermostat.put("roomHint", "Living Room");
-        thermostat.put("attributes", Map.of(
-                "availableThermostatModes", List.of("off", "heat", "cool"),
-                "thermostatTemperatureUnit", "C"
-        ));
-        devices.add(thermostat);
+        List<Map<String, Object>> devices = buildDeviceListForUser(userId);
 
         return Map.of(
                 "requestId", requestId,
                 "payload", Map.of(
-                        "agentUserId", "user-001",
+                        "agentUserId", userId,
                         "devices", devices
                 )
         );
@@ -169,7 +125,137 @@ public class GoogleSmartHomeService {
     }
 
     // =================================================================
-    // PRIVATE HELPERS
+    // PRIVATE — Build device list from DB
+    // =================================================================
+
+    private List<Map<String, Object>> buildDeviceListForUser(String userId) {
+        List<Map<String, Object>> devices = new ArrayList<>();
+
+        try {
+            // Get user by userId string (stored as "user-001" format in oauth_tokens)
+            // Extract numeric id from "user-001" → 1L
+            Long userIdLong = Long.parseLong(userId.replace("user-", ""));
+            Optional<User> userOpt = userRepository.findById(userIdLong);
+
+            if (userOpt.isEmpty()) {
+                log.warn("User not found for userId: {}", userId);
+                return devices;
+            }
+
+            // Get all sites for user
+            List<Site> sites = siteRepository.findByUser_Id(userIdLong);
+
+            for (Site site : sites) {
+                // Get all devices for each site
+                List<Device> siteDevices = deviceRepository.findBySite_SiteId(site.getSiteId());
+
+                for (Device device : siteDevices) {
+                    Map<String, Object> deviceMap = buildGoogleDevice(device, site);
+                    if (deviceMap != null) {
+                        devices.add(deviceMap);
+                    }
+                }
+            }
+
+            log.info("SYNC: Found {} devices for userId: {}", devices.size(), userId);
+
+        } catch (Exception e) {
+            log.error("Failed to build device list for userId: {}", userId, e);
+        }
+
+        return devices;
+    }
+
+    private Map<String, Object> buildGoogleDevice(Device device, Site site) {
+        byte deviceType = device.getDeviceType();
+
+        // Friendly name — use deviceName from DB or fallback to type-based name
+        String name     = device.getDeviceName() != null ? device.getDeviceName() : getDefaultName(deviceType, device.getId());
+        String roomHint = device.getRoomHint()   != null ? device.getRoomHint()   : site.getLocation();
+
+        if (deviceType == DEVICE_TYPE_LIGHT) {
+            Map<String, Object> d = new HashMap<>();
+            d.put("id",     "light-" + device.getId());
+            d.put("type",   "action.devices.types.LIGHT");
+            d.put("traits", List.of(
+                    "action.devices.traits.OnOff",
+                    "action.devices.traits.Brightness",
+                    "action.devices.traits.ColorSetting"
+            ));
+            d.put("name", Map.of(
+                    "name",      name,
+                    "nicknames", List.of(name.toLowerCase(), roomHint.toLowerCase() + " light")
+            ));
+            d.put("willReportState", true);
+            d.put("roomHint", roomHint);
+            d.put("attributes", Map.of(
+                    "commandOnlyBrightness", false,
+                    "colorModel", "temp",
+                    "colorTemperatureRange", Map.of(
+                            "temperatureMinK", 2000,
+                            "temperatureMaxK", 6500
+                    )
+            ));
+            return d;
+        }
+
+        if (deviceType == DEVICE_TYPE_FAN) {
+            Map<String, Object> d = new HashMap<>();
+            d.put("id",     "fan-" + device.getId());
+            d.put("type",   "action.devices.types.FAN");
+            d.put("traits", List.of(
+                    "action.devices.traits.OnOff",
+                    "action.devices.traits.FanSpeed"
+            ));
+            d.put("name", Map.of(
+                    "name",      name,
+                    "nicknames", List.of(name.toLowerCase(), roomHint.toLowerCase() + " fan")
+            ));
+            d.put("willReportState", true);
+            d.put("roomHint", roomHint);
+            d.put("attributes", Map.of(
+                    "reversible", false,
+                    "supportsFanSpeedPercent", true
+            ));
+            return d;
+        }
+
+        if (deviceType == DEVICE_TYPE_THERMOSTAT) {
+            Map<String, Object> d = new HashMap<>();
+            d.put("id",     "thermostat-" + device.getId());
+            d.put("type",   "action.devices.types.THERMOSTAT");
+            d.put("traits", List.of(
+                    "action.devices.traits.OnOff",
+                    "action.devices.traits.TemperatureSetting"
+            ));
+            d.put("name", Map.of(
+                    "name",      name,
+                    "nicknames", List.of(name.toLowerCase(), roomHint.toLowerCase() + " thermostat")
+            ));
+            d.put("willReportState", true);
+            d.put("roomHint", roomHint);
+            d.put("attributes", Map.of(
+                    "availableThermostatModes", List.of("off", "heat", "cool"),
+                    "thermostatTemperatureUnit", "C"
+            ));
+            return d;
+        }
+
+        log.warn("Unknown device type: {} for device id: {}", deviceType, device.getId());
+        return null;
+    }
+
+    private String getDefaultName(byte deviceType, Long id) {
+        return switch (deviceType) {
+            case DEVICE_TYPE_LIGHT      -> "Light " + id;
+            case DEVICE_TYPE_FAN        -> "Fan " + id;
+            case DEVICE_TYPE_THERMOSTAT -> "Thermostat " + id;
+            default                     -> "Device " + id;
+        };
+    }
+
+    // =================================================================
+    // PRIVATE — State and command helpers
     // =================================================================
 
     private Map<String, Object> getCurrentState(String deviceId) {
@@ -183,19 +269,19 @@ public class GoogleSmartHomeService {
         }
         if (deviceId.startsWith("fan")) {
             return new HashMap<>(Map.of(
-                    "online",           true,
-                    "on",               fanService.isOn(deviceId),
+                    "online",                 true,
+                    "on",                     fanService.isOn(deviceId),
                     "currentFanSpeedPercent", fanService.getSpeed(deviceId)
             ));
         }
         if (deviceId.startsWith("thermostat")) {
             double temp = thermostatService.getTemperature(deviceId);
             return new HashMap<>(Map.of(
-                    "online",                          true,
-                    "on",                              thermostatService.isOn(deviceId),
-                    "thermostatMode",                  thermostatService.isOn(deviceId) ? "heat" : "off",
-                    "thermostatTemperatureSetpoint",   temp,
-                    "thermostatTemperatureAmbient",    temp
+                    "online",                        true,
+                    "on",                            thermostatService.isOn(deviceId),
+                    "thermostatMode",                thermostatService.isOn(deviceId) ? "heat" : "off",
+                    "thermostatTemperatureSetpoint", temp,
+                    "thermostatTemperatureAmbient",  temp
             ));
         }
         return Map.of("online", false);
@@ -204,23 +290,16 @@ public class GoogleSmartHomeService {
     private void executeCommand(String deviceId, String command, Map<String, Object> params) {
         log.info("Executing command: {} on device: {} with params: {}", command, deviceId, params);
 
-        // ----- LIGHT COMMANDS -----
         if (deviceId.startsWith("light")) {
             switch (command) {
-                case "action.devices.commands.OnOff" -> {
-                    boolean on = (Boolean) params.get("on");
-                    lightService.setOnOff(deviceId, on);
-                }
-                case "action.devices.commands.BrightnessAbsolute" -> {
-                    int brightness = ((Number) params.get("brightness")).intValue();
-                    lightService.setBrightness(deviceId, brightness);
-                }
+                case "action.devices.commands.OnOff" ->
+                        lightService.setOnOff(deviceId, (Boolean) params.get("on"));
+                case "action.devices.commands.BrightnessAbsolute" ->
+                        lightService.setBrightness(deviceId, ((Number) params.get("brightness")).intValue());
                 case "action.devices.commands.ColorAbsolute" -> {
                     Map<String, Object> color = (Map<String, Object>) params.get("color");
                     if (color != null && color.containsKey("temperature")) {
-                        int kelvin  = ((Number) color.get("temperature")).intValue();
-                        int percent = percentFromKelvin(kelvin);
-                        lightService.setColorTemperature(deviceId, percent);
+                        lightService.setColorTemperature(deviceId, percentFromKelvin(((Number) color.get("temperature")).intValue()));
                     }
                 }
                 default -> log.warn("Unhandled light command: {}", command);
@@ -228,37 +307,25 @@ public class GoogleSmartHomeService {
             return;
         }
 
-        // ----- FAN COMMANDS -----
         if (deviceId.startsWith("fan")) {
             switch (command) {
-                case "action.devices.commands.OnOff" -> {
-                    boolean on = (Boolean) params.get("on");
-                    fanService.setOnOff(deviceId, on);
-                }
-                case "action.devices.commands.SetFanSpeed" -> {
-                    int speed = ((Number) params.get("fanSpeedPercent")).intValue();
-                    fanService.setSpeed(deviceId, speed);
-                }
+                case "action.devices.commands.OnOff" ->
+                        fanService.setOnOff(deviceId, (Boolean) params.get("on"));
+                case "action.devices.commands.SetFanSpeed" ->
+                        fanService.setSpeed(deviceId, ((Number) params.get("fanSpeedPercent")).intValue());
                 default -> log.warn("Unhandled fan command: {}", command);
             }
             return;
         }
 
-        // ----- THERMOSTAT COMMANDS -----
         if (deviceId.startsWith("thermostat")) {
             switch (command) {
-                case "action.devices.commands.OnOff" -> {
-                    boolean on = (Boolean) params.get("on");
-                    thermostatService.setOnOff(deviceId, on);
-                }
-                case "action.devices.commands.ThermostatTemperatureSetpoint" -> {
-                    double temp = ((Number) params.get("thermostatTemperatureSetpoint")).doubleValue();
-                    thermostatService.setTemperature(deviceId, temp);
-                }
-                case "action.devices.commands.ThermostatSetMode" -> {
-                    String mode = (String) params.get("thermostatMode");
-                    thermostatService.setOnOff(deviceId, !mode.equals("off"));
-                }
+                case "action.devices.commands.OnOff" ->
+                        thermostatService.setOnOff(deviceId, (Boolean) params.get("on"));
+                case "action.devices.commands.ThermostatTemperatureSetpoint" ->
+                        thermostatService.setTemperature(deviceId, ((Number) params.get("thermostatTemperatureSetpoint")).doubleValue());
+                case "action.devices.commands.ThermostatSetMode" ->
+                        thermostatService.setOnOff(deviceId, !params.get("thermostatMode").equals("off"));
                 default -> log.warn("Unhandled thermostat command: {}", command);
             }
             return;

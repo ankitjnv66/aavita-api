@@ -87,6 +87,12 @@ public class Device {
     @Builder.Default
     private List<DeviceStatusHistory> statusHistory = new ArrayList<>();
 
+    @Column(name = "device_name", length = 150)
+    private String deviceName;
+
+    @Column(name = "room_hint", length = 150)
+    private String roomHint;
+
     @PrePersist
     protected void onCreate() {
         Instant now = Instant.now();
