@@ -53,39 +53,25 @@ public class HomeGraphReportService {
         }
     }
 
+    // ----------------------------------------------------------------
+    // Existing: Light / Fan
+    // ----------------------------------------------------------------
     public void reportState(String deviceId, boolean on, int brightness) {
         try {
-            // Build device state
             Map<String, Object> state = new HashMap<>();
             state.put("on", on);
             state.put("brightness", brightness);
             state.put("online", true);
-
-            // Build states map: deviceId -> state
-            Map<String, Object> states = new HashMap<>();
-            states.put(deviceId, state);
-
-            // Build request using correct model classes
-            ReportStateAndNotificationRequest request = new ReportStateAndNotificationRequest()
-                    .setRequestId(UUID.randomUUID().toString())
-                    .setAgentUserId(agentUserId)
-                    .setPayload(new StateAndNotificationPayload()
-                            .setDevices(new ReportStateAndNotificationDevice()
-                                    .setStates(states)));
-
-            ReportStateAndNotificationResponse response = homeGraphService
-                    .devices()
-                    .reportStateAndNotification(request)
-                    .execute();
-
-            log.info("HomeGraph state reported for device: {} on={} brightness={} | requestId: {}",
-                    deviceId, on, brightness, response.getRequestId());
-
+            doReport(deviceId, state);
+            log.info("HomeGraph state reported for device: {} on={} brightness={}", deviceId, on, brightness);
         } catch (Exception e) {
             log.error("Failed to report state to HomeGraph for device: {}", deviceId, e);
         }
     }
 
+    // ----------------------------------------------------------------
+    // Existing: Thermostat
+    // ----------------------------------------------------------------
     public void reportThermostatState(String deviceId, boolean on, double temperatureCelsius) {
         try {
             Map<String, Object> state = new HashMap<>();
@@ -94,31 +80,48 @@ public class HomeGraphReportService {
             state.put("thermostatTemperatureSetpoint", temperatureCelsius);
             state.put("thermostatTemperatureAmbient", temperatureCelsius);
             state.put("online", true);
-
-            Map<String, Object> states = new HashMap<>();
-            states.put(deviceId, state);
-
-            ReportStateAndNotificationDevice devicesPayload = new ReportStateAndNotificationDevice();
-            devicesPayload.setStates(states);
-
-            StateAndNotificationPayload payload = new StateAndNotificationPayload();
-            payload.setDevices(devicesPayload);
-
-            ReportStateAndNotificationRequest request = new ReportStateAndNotificationRequest();
-            request.setRequestId(UUID.randomUUID().toString());
-            request.setAgentUserId(agentUserId);
-            request.setPayload(payload);
-
-            ReportStateAndNotificationResponse response = homeGraphService
-                    .devices()
-                    .reportStateAndNotification(request)
-                    .execute();
-
-            log.info("HomeGraph thermostat state reported for device: {} on={} temp={}°C | requestId: {}",
-                    deviceId, on, temperatureCelsius, response.getRequestId());
-
+            doReport(deviceId, state);
+            log.info("HomeGraph thermostat state reported for device: {} on={} temp={}°C", deviceId, on, temperatureCelsius);
         } catch (Exception e) {
             log.error("Failed to report thermostat state to HomeGraph for device: {}", deviceId, e);
         }
+    }
+
+    // ----------------------------------------------------------------
+    // NEW: Switch GPIO pin — reports simple on/off state
+    // deviceId format: "switch-{deviceId}-{pinNumber}"
+    // ----------------------------------------------------------------
+    public void reportSwitchState(String deviceId, boolean on) {
+        try {
+            Map<String, Object> state = new HashMap<>();
+            state.put("on", on);
+            state.put("online", true);
+            doReport(deviceId, state);
+            log.info("HomeGraph switch state reported for device: {} on={}", deviceId, on);
+        } catch (Exception e) {
+            log.error("Failed to report switch state to HomeGraph for device: {}", deviceId, e);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Shared report helper — avoids duplicating HomeGraph boilerplate
+    // ----------------------------------------------------------------
+    private void doReport(String deviceId, Map<String, Object> state) throws Exception {
+        Map<String, Object> states = new HashMap<>();
+        states.put(deviceId, state);
+
+        ReportStateAndNotificationRequest request = new ReportStateAndNotificationRequest()
+                .setRequestId(UUID.randomUUID().toString())
+                .setAgentUserId(agentUserId)
+                .setPayload(new StateAndNotificationPayload()
+                        .setDevices(new ReportStateAndNotificationDevice()
+                                .setStates(states)));
+
+        ReportStateAndNotificationResponse response = homeGraphService
+                .devices()
+                .reportStateAndNotification(request)
+                .execute();
+
+        log.debug("HomeGraph requestId: {}", response.getRequestId());
     }
 }

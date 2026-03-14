@@ -6,6 +6,9 @@ spring:
     url: jdbc:postgresql://localhost:5432/AavitaDB
     username:
     password:
+    hikari:
+      max-lifetime: 600000        # 10 min (default 30min — too long for local Postgres)
+      keepalive-time: 300000      # ping every 5 min to keep connections alive
 
   jpa:
     hibernate:
