@@ -20,4 +20,7 @@ public interface DeviceRepository extends JpaRepository<Device, Long> {
     Optional<Device> findBySrcMacAndSiteId(@Param("srcMac") String srcMac, @Param("siteId") UUID siteId);
 
     List<Device> findBySite_SiteId(UUID siteId);
+
+    @Query("SELECT d FROM Device d LEFT JOIN FETCH d.digitalPins WHERE d.site.siteId = :siteId")
+    List<Device> findBySiteIdWithDigitalPins(@Param("siteId") UUID siteId);
 }
