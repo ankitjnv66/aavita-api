@@ -25,4 +25,6 @@ public class DeviceResponse {
     private Instant lastSeen;
     private List<DeviceDigitalPinResponse> digitalPins;
     private List<DevicePwmPinResponse> pwmPins;
+    private String deviceName;
+    private String roomHint;
 }

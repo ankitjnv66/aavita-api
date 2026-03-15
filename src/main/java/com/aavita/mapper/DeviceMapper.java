@@ -15,6 +15,8 @@ public interface DeviceMapper {
     @Mapping(target = "siteId", expression = "java(device.getSite().getSiteId())")
     @Mapping(target = "digitalPins", expression = "java(mapDigitalPins(device))")
     @Mapping(target = "pwmPins", expression = "java(mapPwmPins(device))")
+    @Mapping(target = "deviceName", source = "deviceName")
+    @Mapping(target = "roomHint", source = "roomHint")
     DeviceResponse toResponse(Device device);
 
     default List<DeviceDigitalPinResponse> mapDigitalPins(Device device) {

@@ -9,6 +9,7 @@ import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class JwtUtil {
@@ -80,8 +81,10 @@ public class JwtUtil {
     private void validateAudience(Claims claims) {
         List<String> allowedAudiences = properties.getAudiences();
         if (allowedAudiences != null && !allowedAudiences.isEmpty()) {
-            Object audienceClaim = claims.get("aud");
-            if (audienceClaim == null || !allowedAudiences.contains(audienceClaim.toString())) {
+            Set<String> tokenAudiences = claims.getAudience();  // returns Set<String>
+            boolean valid = tokenAudiences.stream()
+                    .anyMatch(allowedAudiences::contains);
+            if (!valid) {
                 throw new JwtException("Invalid JWT audience");
             }
         }
