@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/devices")
@@ -31,6 +32,11 @@ public class DeviceController {
             return ResponseEntity.status(404).body(Map.of("message", "Device with id " + deviceId + " not found"));
         }
         return ResponseEntity.ok(device);
+    }
+
+    @GetMapping("/site/{siteId}")
+    public ResponseEntity<?> getBySite(@PathVariable UUID siteId) {
+        return ResponseEntity.ok(deviceService.getBySiteId(siteId));
     }
 
     @PostMapping

@@ -5,6 +5,7 @@ import com.aavita.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -33,6 +34,14 @@ public class UserController {
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
+        return ResponseEntity.ok(user);
+    }
+
+    // Add after getById() endpoint
+    @GetMapping("/me")
+    public ResponseEntity<?> getMe(@AuthenticationPrincipal String email) {
+        UserResponse user = userService.getByEmail(email);
+        if (user == null) return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         return ResponseEntity.ok(user);
     }
 
