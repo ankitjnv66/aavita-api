@@ -38,7 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var claims = jwtUtil.validateToken(token);
                 String email = claims.getSubject();
                 Long userId = claims.get("user_id", Long.class);
-                String userType = claims.get("UserType", String.class);
+                String userType = claims.get("userType", String.class);
 
                 List<SimpleGrantedAuthority> authorities = userType != null
                         ? List.of(new SimpleGrantedAuthority("ROLE_" + userType))

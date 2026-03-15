@@ -39,8 +39,9 @@ public class DeviceService {
     }
 
     // Add after getById() method
+    @Transactional(readOnly = true)
     public List<DeviceResponse> getBySiteId(UUID siteId) {
-        return deviceRepository.findBySite_SiteId(siteId).stream()
+        return deviceRepository.findBySiteIdWithDigitalPins(siteId).stream()
                 .map(deviceMapper::toResponse)
                 .collect(Collectors.toList());
     }
