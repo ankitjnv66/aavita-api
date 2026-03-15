@@ -38,6 +38,13 @@ public class DeviceService {
                 .orElse(null);
     }
 
+    // Add after getById() method
+    public List<DeviceResponse> getBySiteId(UUID siteId) {
+        return deviceRepository.findBySite_SiteId(siteId).stream()
+                .map(deviceMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public DeviceResponse create(CreateDeviceRequest request) {
         Site site = siteRepository.findById(request.getSiteId())

@@ -32,6 +32,13 @@ public class UserService {
                 .orElse(null);
     }
 
+    // Add after getById() method
+    public UserResponse getByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .map(userMapper::toResponse)
+                .orElse(null);
+    }
+
     @Transactional
     public UserResponse create(CreateUserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
