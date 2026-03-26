@@ -78,6 +78,11 @@ logging:
     com.aavita: INFO
     org.springframework.security: WARN
 
+alexa:
+  shared-secret: ${ALEXA_SHARED_SECRET:Aavita@Alexa#2026}
+  # This value must match the X-Alexa-Secret header configured in Alexa Developer Console
+  # For production: set ALEXA_SHARED_SECRET environment variable, do not hardcode
+
 springdoc:
   api-docs:
     path: /v3/api-docs

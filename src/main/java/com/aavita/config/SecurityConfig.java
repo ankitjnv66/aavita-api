@@ -36,6 +36,12 @@ public class SecurityConfig {
                         // not your app JWT. Validation happens inside the controller.
                         .requestMatchers("/api/google/fulfillment").permitAll()
 
+                        // --- Alexa Smart Home fulfillment ---
+                        // Permitted here because Alexa sends X-Alexa-Secret header + JWT,
+                        // not your app JWT in Authorization header.
+                        // Validation (secret + JWT) happens inside AlexaFulfillmentController.
+                        .requestMatchers("/api/alexa/fulfillment").permitAll()
+
                         // --- Existing authenticated routes (unchanged) ---
                         .requestMatchers("/api/auth/change-password").authenticated()
                         .anyRequest().authenticated()
