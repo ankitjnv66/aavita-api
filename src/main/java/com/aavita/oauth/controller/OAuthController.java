@@ -1,26 +1,35 @@
 package com.aavita.oauth.controller;
 
+import com.aavita.entity.User;
 import com.aavita.oauth.service.OAuthService;
+import com.aavita.repository.UserRepository;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * OAuth 2.0 endpoints required by Google Smart Home Account Linking.
+ * OAuth 2.0 endpoints required by Google Smart Home and Alexa Account Linking.
  *
- * Google Actions Console fields:
+ * Google Actions Console / Alexa Developer Console fields:
  *   Authorization URL → https://your-domain.com/oauth/authorize
  *   Token URL         → https://your-domain.com/oauth/token
+ *
+ * Notes:
+ *   - Alexa sends client_id + client_secret via HTTP Basic Auth on /oauth/token
+ *   - Google sends them as form params — both are handled here
+ *   - /oauth/login uses real BCrypt password validation via UserRepository
  */
 @Slf4j
 @RestController
@@ -28,12 +37,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class OAuthController {
 
-    private final OAuthService oAuthService;
+    private final OAuthService     oAuthService;
+    private final UserRepository   userRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     // ----------------------------------------------------------------
     // GET /oauth/authorize
-    // Google redirects user here to log in and grant access.
-    // Returns an HTML login form — user submits credentials here.
+    // Alexa / Google redirect user here to log in and grant access.
+    // Returns an HTML login form.
     // ----------------------------------------------------------------
     @GetMapping("/authorize")
     public void authorize(
@@ -43,13 +54,11 @@ public class OAuthController {
             @RequestParam(value = "response_type", defaultValue = "code") String responseType,
             HttpServletResponse response) throws IOException {
 
-        // Validate client
         if (!oAuthService.isValidClient(clientId, redirectUri)) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid client_id or redirect_uri");
             return;
         }
 
-        // Return a simple login page — styled to match your app branding
         String html = """
                 <!DOCTYPE html>
                 <html>
@@ -99,18 +108,18 @@ public class OAuthController {
                             font-weight: 600;
                         }
                         button:hover { background: #1557b0; }
-                        .error { color: #d93025; font-size: 13px; margin-top: 12px; }
+                        .error { color: #d93025; font-size: 13px; margin-top: 12px; text-align: center; }
                     </style>
                 </head>
                 <body>
                     <div class="card">
-                        <h2>🏠 Smart Home</h2>
-                        <p>Sign in to link your account with Google Home</p>
+                        <h2>🏠 Aavita Smart Home</h2>
+                        <p>Sign in to link your account</p>
                         <form method="POST" action="/oauth/login">
                             <input type="hidden" name="client_id"    value="%s" />
                             <input type="hidden" name="redirect_uri" value="%s" />
                             <input type="hidden" name="state"        value="%s" />
-                            <input type="text"     name="username" placeholder="Email or Username" required autofocus />
+                            <input type="email"    name="username" placeholder="Email" required autofocus />
                             <input type="password" name="password" placeholder="Password" required />
                             <button type="submit">Sign In & Link Account</button>
                         </form>
@@ -125,8 +134,8 @@ public class OAuthController {
 
     // ----------------------------------------------------------------
     // POST /oauth/login
-    // Handles login form submission. Validates credentials using your
-    // existing auth logic, then redirects back to Google with auth code.
+    // Handles login form submission. Validates credentials via
+    // UserRepository + BCrypt, then redirects back with auth code.
     // ----------------------------------------------------------------
     @PostMapping("/login")
     public void login(
@@ -137,91 +146,104 @@ public class OAuthController {
             @RequestParam("state")        String state,
             HttpServletResponse response) throws IOException {
 
-        // TODO: Replace with your existing user authentication logic
-        // Example:
-        //   Optional<User> user = userService.authenticate(username, password);
-        //   if (user.isEmpty()) { ... show error ... }
-        //   String userId = user.get().getId().toString();
+        String errorRedirect = "/oauth/authorize?client_id=" + clientId
+                + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
+                + "&state=" + state
+                + "&error=invalid_credentials";
 
-        // ---- STUB: Replace this block with your real auth ----
-        boolean isValidUser = true;           // TODO: validate credentials
-        String userId = "user-001";           // TODO: get real userId from DB
-        // ------------------------------------------------------
-
-        if (!isValidUser) {
-            response.sendRedirect("/oauth/authorize?client_id=" + clientId
-                    + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
-                    + "&state=" + state
-                    + "&error=invalid_credentials");
+        // Real auth — look up user by email and verify password
+        Optional<User> userOpt = userRepository.findByEmail(username);
+        if (userOpt.isEmpty()) {
+            log.warn("OAuth login failed: user not found for email: {}", username);
+            response.sendRedirect(errorRedirect);
             return;
         }
 
-        // Generate auth code and redirect back to Google
+        User user = userOpt.get();
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            log.warn("OAuth login failed: wrong password for email: {}", username);
+            response.sendRedirect(errorRedirect);
+            return;
+        }
+
+        String userId  = user.getId().toString();
         String authCode = oAuthService.generateAuthCode(userId, clientId, redirectUri);
 
         String redirectUrl = redirectUri
-                + "?code=" + authCode
+                + "?code="  + authCode
                 + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
 
-        log.info("OAuth: Redirecting to Google with auth code for userId: {}", userId);
+        log.info("OAuth login success: userId={} → redirecting with auth code", userId);
         response.sendRedirect(redirectUrl);
     }
 
     // ----------------------------------------------------------------
     // POST /oauth/token
-    // Google calls this to exchange auth code for access token.
-    // Also handles token refresh requests.
+    // Exchanges auth code for access token (authorization_code flow)
+    // or validates refresh token (refresh_token flow).
+    //
+    // Supports both:
+    //   - Form params: client_id + client_secret (Google)
+    //   - HTTP Basic Auth header (Alexa)
     // ----------------------------------------------------------------
     @PostMapping(value = "/token", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> token(
-            @RequestParam("grant_type")              String grantType,
-            @RequestParam(value = "code",            required = false) String code,
-            @RequestParam(value = "client_id",       required = false) String clientId,
-            @RequestParam(value = "client_secret",   required = false) String clientSecret,
-            @RequestParam(value = "redirect_uri",    required = false) String redirectUri,
-            @RequestParam(value = "refresh_token",   required = false) String refreshToken) {
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestParam("grant_type")                               String grantType,
+            @RequestParam(value = "code",          required = false)  String code,
+            @RequestParam(value = "client_id",     required = false)  String clientId,
+            @RequestParam(value = "client_secret", required = false)  String clientSecret,
+            @RequestParam(value = "redirect_uri",  required = false)  String redirectUri,
+            @RequestParam(value = "refresh_token", required = false)  String refreshToken) {
 
-        log.info("OAuth: Token request - grant_type: {}", grantType);
+        // Alexa sends client credentials via HTTP Basic Auth header — extract if present
+        if (authHeader != null && authHeader.startsWith("Basic ")) {
+            try {
+                String decoded = new String(Base64.getDecoder().decode(authHeader.substring(6)));
+                String[] parts = decoded.split(":", 2);
+                if (parts.length == 2) {
+                    clientId     = parts[0];
+                    clientSecret = parts[1];
+                    log.info("OAuth: client credentials extracted from Basic Auth header");
+                }
+            } catch (Exception e) {
+                log.warn("OAuth: failed to decode Basic Auth header: {}", e.getMessage());
+            }
+        }
+
+        log.info("OAuth: Token request — grant_type: {}, clientId: {}", grantType, clientId);
 
         if ("authorization_code".equals(grantType)) {
-            // Exchange auth code for access token
             Optional<String> accessToken = oAuthService.exchangeAuthCodeForToken(
                     code, clientId, clientSecret, redirectUri);
 
             if (accessToken.isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "invalid_grant",
-                                     "error_description", "Invalid or expired authorization code"));
+                                "error_description", "Invalid or expired authorization code"));
             }
 
-            Map<String, Object> responseBody = new HashMap<>();
-            responseBody.put("access_token",  accessToken.get());
-            responseBody.put("token_type",    "Bearer");
-            responseBody.put("expires_in",    3600);          // 1 hour in seconds
-            // Note: For simplicity we reuse access token as refresh token
-            // For production, generate a separate long-lived refresh token
-            responseBody.put("refresh_token", accessToken.get());
-
-            return ResponseEntity.ok(responseBody);
+            Map<String, Object> body = new HashMap<>();
+            body.put("access_token",  accessToken.get());
+            body.put("token_type",    "Bearer");
+            body.put("expires_in",    3600);
+            body.put("refresh_token", accessToken.get()); // reused as refresh for simplicity
+            return ResponseEntity.ok(body);
 
         } else if ("refresh_token".equals(grantType)) {
-            // Validate existing token (reuse as refresh)
             Optional<String> userId = oAuthService.validateAccessToken(refreshToken);
 
             if (userId.isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "invalid_grant",
-                                     "error_description", "Invalid or expired refresh token"));
+                                "error_description", "Invalid or expired refresh token"));
             }
 
-            // Issue new access token
-            // For simplicity, reuse same token if still valid
-            Map<String, Object> responseBody = new HashMap<>();
-            responseBody.put("access_token",  refreshToken);
-            responseBody.put("token_type",    "Bearer");
-            responseBody.put("expires_in",    3600);
-
-            return ResponseEntity.ok(responseBody);
+            Map<String, Object> body = new HashMap<>();
+            body.put("access_token",  refreshToken); // still valid, reuse
+            body.put("token_type",    "Bearer");
+            body.put("expires_in",    3600);
+            return ResponseEntity.ok(body);
 
         } else {
             return ResponseEntity.badRequest()
