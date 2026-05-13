@@ -3,9 +3,9 @@ spring:
     name: aavita-api
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/AavitaDB
-    username:
-    password:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/AavitaDB}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       max-lifetime: 600000        # 10 min (default 30min — too long for local Postgres)
       keepalive-time: 300000      # ping every 5 min to keep connections alive
@@ -25,7 +25,7 @@ spring:
     baseline-on-migrate: true
 
 server:
-  port: 9090
+  port: ${SERVER_PORT:9090}
 
 jwt:
   key: ${JWT_KEY:m7H2qPa91F/9p8q7o9KDfF3hB+8mNh2Wmcb1K3qj1BQ=}
@@ -49,11 +49,11 @@ jwt:
 
 google:
   smarthome:
-    client-id: smarthome-client-001
-    client-secret: Aavita@Smart#2026
-    agent-user-id: user-001
+    client-id: ${GOOGLE_SMARTHOME_CLIENT_ID:smarthome-client-001}
+    client-secret: ${GOOGLE_SMARTHOME_CLIENT_SECRET:Aavita@Smart#2026}
+    agent-user-id: ${GOOGLE_SMARTHOME_AGENT_USER_ID:user-001}
   homegraph:
-    service-account-key: classpath:certs/homegraph-service-account.json
+    service-account-key: ${GOOGLE_HOMEGRAPH_SERVICE_ACCOUNT_KEY:classpath:certs/homegraph-service-account.json}
 
 #Without TLS
 #mqtt:
@@ -64,13 +64,13 @@ google:
 
 #With TLS
 mqtt:
-  enabled: true
-  broker: ssl://localhost:8883
-  client-id: JavaClient
-  subscribe-topic: "+/+/sub"
+  enabled: ${MQTT_ENABLED:true}
+  broker: ${MQTT_BROKER:ssl://localhost:8883}
+  client-id: ${MQTT_CLIENT_ID:JavaClient}
+  subscribe-topic: ${MQTT_SUBSCRIBE_TOPIC:+/+/sub}
   tls:
-    truststore: classpath:certs/aavita-truststore.jks
-    truststore-password: aavita123
+    truststore: ${MQTT_TLS_TRUSTSTORE:classpath:certs/aavita-truststore.jks}
+    truststore-password: ${MQTT_TLS_TRUSTSTORE_PASSWORD:aavita123}
 
 logging:
   level:
