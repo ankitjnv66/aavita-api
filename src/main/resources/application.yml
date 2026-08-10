@@ -23,6 +23,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    repair-on-migrate: true
+    out-of-order: true
 
 server:
   port: ${SERVER_PORT:9090}
