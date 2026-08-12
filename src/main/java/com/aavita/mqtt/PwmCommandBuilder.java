@@ -9,6 +9,8 @@ import com.aavita.mqtt.model.enums.ActionCause;
 import com.aavita.mqtt.model.enums.BoardType;
 import com.aavita.mqtt.model.enums.CommandType;
 import com.aavita.mqtt.model.enums.DeviceType;
+import com.aavita.mqtt.util.Crc16Util;
+import com.aavita.mqtt.util.PayloadCrcByteBuilder;
 import org.springframework.stereotype.Component;
 
 import java.util.Random;
@@ -46,6 +48,11 @@ public class PwmCommandBuilder {
         pd.setActionCause(ActionCause.App);
         pd.setCmdType(CommandType.Action);
         pd.setCmdPkt(uart);
+
+        // Compute and set CRC16 (must happen after all pd fields above are set)
+        byte[] crcBytes = PayloadCrcByteBuilder.build(pd);
+        pd.setCrc16(Crc16Util.compute(crcBytes));
+
         payload.setPayloadData(pd);
 
         return payload;
