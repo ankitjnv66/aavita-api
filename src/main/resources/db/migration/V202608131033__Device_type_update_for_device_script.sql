@@ -34,7 +34,7 @@ SELECT
     '11:22:33:44:55:66',         -- gateway_mac — must match ESP8266 firmware GATEWAY_MAC
     '23:AB:CD:00:F0:DE',         -- sub_gateway_mac
     0,                           -- pkt_id
-    0,                           -- board_type
+    1,                           -- board_type
     4,                           -- device_type = SWITCH (multi-pin GPIO controller)
     0,                           -- device_role
     0,                           -- last_pkt_type
