@@ -88,14 +88,14 @@ public class DeviceCommandPublisher {
     private com.aavita.mqtt.model.DevicePayload buildPwmCommand(String payload, Device device) {
         String[] p = payload.split("=");
         int pwmIndex;
-        byte value;
+        int value;
 
         if (p.length == 3) {
             pwmIndex = Integer.parseInt(p[1]);
-            value = Byte.parseByte(p[2]);
+            value = Integer.parseInt(p[2]);
         } else if (p.length == 2) {
             pwmIndex = Integer.parseInt(p[0]);
-            value = Byte.parseByte(p[1]);
+            value = Integer.parseInt(p[1]);
         } else {
             throw new IllegalArgumentException("Invalid SET_PWM payload format");
         }
