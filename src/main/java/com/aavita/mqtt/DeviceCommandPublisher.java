@@ -21,6 +21,7 @@ public class DeviceCommandPublisher {
     private final DeviceRepository deviceRepository;
     private final PinCommandBuilder pinBuilder;
     private final PwmCommandBuilder pwmBuilder;
+    private final StatusRequestBuilder statusRequestBuilder;
     private final JsonCommandBuilder jsonBuilder;
     private final MqttService mqttService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -33,15 +34,18 @@ public class DeviceCommandPublisher {
         Device device = deviceRepository.findById(request.getDeviceId())
                 .orElseThrow(() -> new IllegalArgumentException("Device with Id " + request.getDeviceId() + " not found"));
 
-        if (request.getPayload() == null || request.getPayload().isBlank()) {
-            throw new IllegalArgumentException("Payload is required");
-        }
-
         com.aavita.mqtt.model.DevicePayload payload;
         String command = request.getCommand().toUpperCase();
         switch (command) {
-            case "SET_PIN" -> payload = buildPinCommand(request.getPayload(), device);
-            case "SET_PWM" -> payload = buildPwmCommand(request.getPayload(), device);
+            case "SET_PIN" -> {
+                requirePayload(request);
+                payload = buildPinCommand(request.getPayload(), device);
+            }
+            case "SET_PWM" -> {
+                requirePayload(request);
+                payload = buildPwmCommand(request.getPayload(), device);
+            }
+            case "STATUS_REQUEST" -> payload = statusRequestBuilder.build(device);
             default -> throw new IllegalArgumentException("Unknown command: " + request.getCommand());
         }
 
@@ -55,6 +59,12 @@ public class DeviceCommandPublisher {
         } catch (Exception ex) {
             log.error("Error processing device build and publish command", ex);
             throw new RuntimeException(ex);
+        }
+    }
+
+    private void requirePayload(DeviceCommandRequest request) {
+        if (request.getPayload() == null || request.getPayload().isBlank()) {
+            throw new IllegalArgumentException("Payload is required");
         }
     }
 
