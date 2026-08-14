@@ -9,7 +9,9 @@ ExecStart=/usr/bin/java -jar /root/aavita-api-1.0.0-SNAPSHOT.jar
 Environment=SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/AavitaDB
 Environment=SPRING_DATASOURCE_USERNAME=aavita
 Environment=SPRING_DATASOURCE_PASSWORD=Aavita@123
-Environment=MQTT_ENABLED=false
+Environment=MQTT_ENABLED=true
+Environment=MQTT_USERNAME=aavita
+Environment=MQTT_PASSWORD=aavita
 Environment=JWT_KEY=m7H2qPa91F/9p8q7o9KDfF3hB+8mNh2Wmcb1K3qj1BQ=
 Restart=always
 RestartSec=10

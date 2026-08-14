@@ -31,6 +31,12 @@ public class MqttService implements MqttCallback {
     @Value("${mqtt.tls.truststore-password:#{null}}")
     private String truststorePassword;
 
+    @Value("${mqtt.username:#{null}}")
+    private String username;
+
+    @Value("${mqtt.password:#{null}}")
+    private String password;
+
     private MqttClient client;
     private volatile boolean manualDisconnect = false;
     private MqttMessageHandler messageHandler;
@@ -60,6 +66,15 @@ public class MqttService implements MqttCallback {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setCleanSession(true);
         options.setAutomaticReconnect(true);
+
+        // Add username/password if configured
+        if (username != null && !username.isBlank()) {
+            options.setUserName(username);
+            if (password != null) {
+                options.setPassword(password.toCharArray());
+            }
+            log.info("MQTT authenticating as user '{}'", username);
+        }
 
         // Add TLS if truststore is configured
         if (truststore != null && broker.startsWith("ssl://")) {

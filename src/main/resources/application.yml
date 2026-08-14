@@ -43,14 +43,6 @@ jwt:
     - "http://64.227.160.209:9090"
   expiration-hours: 3
 
-#google:
-#  smarthome:
-#    # Get this from Google Actions Console → Project Settings → Client ID
-#    client-id: ${GOOGLE_SMARTHOME_CLIENT_ID:your-google-client-id-here}
-#
-#    # A strong secret string — must match what you enter in Developer Console
-#    client-secret: ${GOOGLE_SMARTHOME_CLIENT_SECRET:your-strong-secret-here}
-
 google:
   smarthome:
     client-id: ${GOOGLE_SMARTHOME_CLIENT_ID:smarthome-client-001}
@@ -59,19 +51,14 @@ google:
   homegraph:
     service-account-key: ${GOOGLE_HOMEGRAPH_SERVICE_ACCOUNT_KEY:classpath:certs/homegraph-service-account.json}
 
-#Without TLS
-#mqtt:
-#  enabled: true
-#  broker: tcp://localhost:1883
-#  client-id: JavaClient
-#  subscribe-topic: "+/+/sub"
-
 #With TLS
 mqtt:
   enabled: ${MQTT_ENABLED:true}
   broker: ${MQTT_BROKER:ssl://localhost:8883}
   client-id: ${MQTT_CLIENT_ID:JavaClient}
   subscribe-topic: ${MQTT_SUBSCRIBE_TOPIC:+/+/sub}
+  username: ${MQTT_USERNAME:backend-service}
+  password: ${MQTT_PASSWORD:}
   tls:
     truststore: ${MQTT_TLS_TRUSTSTORE:classpath:certs/aavita-truststore.jks}
     truststore-password: ${MQTT_TLS_TRUSTSTORE_PASSWORD:aavita123}
