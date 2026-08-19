@@ -4,10 +4,12 @@ import com.aavita.dto.device.*;
 import com.aavita.service.DeviceDigitalPinService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/device-digital-pins")
 @RequiredArgsConstructor
@@ -23,7 +25,10 @@ public class DeviceDigitalPinsController {
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         DeviceDigitalPinDto pin = service.getById(id);
-        if (pin == null) return ResponseEntity.notFound().build();
+        if (pin == null) {
+            log.warn("Digital pin not found, id: {}", id);
+            return ResponseEntity.notFound().build();
+        }
         return ResponseEntity.ok(pin);
     }
 
@@ -35,6 +40,7 @@ public class DeviceDigitalPinsController {
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody DeviceDigitalPinCreateDto dto) {
         DeviceDigitalPinDto created = service.create(dto);
+        log.info("Digital pin created, id: {}", created.getId());
         return ResponseEntity
                 .created(ServletUriComponentsBuilder.fromCurrentRequest()
                         .path("/{id}")
@@ -46,13 +52,22 @@ public class DeviceDigitalPinsController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody DeviceDigitalPinUpdateDto dto) {
         DeviceDigitalPinDto updated = service.update(id, dto);
-        if (updated == null) return ResponseEntity.notFound().build();
+        if (updated == null) {
+            log.warn("Digital pin update failed, not found, id: {}", id);
+            return ResponseEntity.notFound().build();
+        }
+        log.info("Digital pin updated, id: {}", id);
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         boolean ok = service.delete(id);
-        return ok ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        if (!ok) {
+            log.warn("Digital pin delete failed, not found, id: {}", id);
+            return ResponseEntity.notFound().build();
+        }
+        log.info("Digital pin deleted, id: {}", id);
+        return ResponseEntity.noContent().build();
     }
 }

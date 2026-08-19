@@ -27,6 +27,9 @@ public class DeviceCommandPublisher {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public String buildAndPublish(DeviceCommandRequest request) {
+        log.info("Building command '{}' for device {} at site {}",
+                request.getCommand(), request.getDeviceId(), request.getSiteId());
+
         if (request.getSiteId() == null) {
             throw new IllegalArgumentException("SiteId is required");
         }

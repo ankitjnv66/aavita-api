@@ -14,8 +14,10 @@ import com.aavita.mqtt.util.Crc16Util;
 import com.aavita.mqtt.util.PayloadCrcByteBuilder;
 import com.aavita.repository.DeviceDigitalPinRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -31,6 +33,7 @@ import java.util.Random;
  *   2 = OFF
  *   0 = unchanged / not set (we avoid this — always send explicit state)
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class PinCommandBuilder {
@@ -65,6 +68,11 @@ public class PinCommandBuilder {
         // Step 2: Apply ONLY the target pin change
         // ----------------------------------------------------------------
         digitalValues[pin - 1] = state ? PIN_ON : PIN_OFF;
+
+        // Full state array at DEBUG — this is exactly what you'd need to check
+        // if the "all other pins reset" bug ever regresses.
+        log.info("Digital state array for device {} (pin {} -> {}): {}",
+                device.getId(), pin, state ? "ON" : "OFF", Arrays.toString(digitalValues));
 
         // ----------------------------------------------------------------
         // Step 3: Build UART packet with full state array
