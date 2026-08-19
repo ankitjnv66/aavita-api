@@ -16,6 +16,7 @@ import com.aavita.mqtt.util.PayloadCrcByteBuilder;
 import com.aavita.repository.DeviceDigitalPinRepository;
 import com.aavita.repository.DevicePwmPinRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -39,6 +40,7 @@ import java.util.Random;
  * DeviceDigitalPinRepository.findByDevice_Id(Long) already used in
  * PinCommandBuilder. Add that query method if it doesn't already exist.
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class StatusRequestBuilder {
@@ -52,6 +54,8 @@ public class StatusRequestBuilder {
     private final Random random = new Random();
 
     public DevicePayload build(Device device) {
+        log.info("Building STATUS_REQUEST payload for device {}", device.getId());
+
         UartCommandPacket uart = new UartCommandPacket();
         uart.setDigitalValues(buildDigitalStateArray(device.getId()));
         uart.setPwmValues(buildPwmStateArray(device.getId()));

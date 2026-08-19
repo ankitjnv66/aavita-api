@@ -11,6 +11,7 @@ import com.aavita.mqtt.model.enums.CommandType;
 import com.aavita.mqtt.model.enums.DeviceType;
 import com.aavita.mqtt.util.Crc16Util;
 import com.aavita.mqtt.util.PayloadCrcByteBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Random;
@@ -26,6 +27,7 @@ import java.util.Random;
  * roughly the top half of the spec's valid range. Range is validated here
  * before the value is narrowed to a byte for the wire format.
  */
+@Slf4j
 @Component
 public class PwmCommandBuilder {
 
@@ -42,6 +44,8 @@ public class PwmCommandBuilder {
             throw new IllegalArgumentException(
                     "PWM value must be in range [" + PWM_MIN_VALID + "," + PWM_MAX_VALID + "], got: " + value);
         }
+
+        log.info("Building SET_PWM payload for device {}, channel {}, value {}", device.getId(), pin, value);
 
         UartCommandPacket uart = new UartCommandPacket();
         uart.setDigitalValues(new byte[18]);
