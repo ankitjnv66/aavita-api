@@ -10,13 +10,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Single entry point for all Google Smart Home fulfillment requests.
  * Handles SYNC, QUERY, and EXECUTE intents from Google Assistant / Google Home.
  *
  * Security: Google's Bearer token is validated via GoogleTokenValidator
- * (separate from your app's JwtAuthenticationFilter).
+ * (separate from your app's JwtAuthenticationFilter). The user the token
+ * belongs to is passed to every handler so each intent only touches that
+ * user's devices.
  */
 @Slf4j
 @RestController
@@ -36,12 +39,14 @@ public class FulfillmentController {
             @RequestBody Map<String, Object> request,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        // Step 1: Validate Google's OAuth token
-        if (!tokenValidator.validate(authHeader)) {
+        // Step 1: Validate Google's OAuth token and find out which user it belongs to
+        Optional<Long> userIdOpt = tokenValidator.resolveUserId(authHeader);
+        if (userIdOpt.isEmpty()) {
             log.warn("Fulfillment request rejected: invalid Google token");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "UNAUTHORIZED"));
         }
+        Long userId = userIdOpt.get();
 
         // Step 2: Extract intent from request
         String requestId = (String) request.get("requestId");
@@ -49,20 +54,25 @@ public class FulfillmentController {
 
         if (inputs == null || inputs.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("requestId", requestId, "error", "No inputs provided"));
+                    .body(Map.of("requestId", String.valueOf(requestId), "error", "No inputs provided"));
         }
 
         String intent = (String) inputs.get(0).get("intent");
-        log.info("Fulfillment intent received: {} | requestId: {}", intent, requestId);
+        log.info("Fulfillment intent received: {} | requestId: {} | userId: {}", intent, requestId, userId);
 
-        // Step 3: Route to appropriate handler
+        if (intent == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("requestId", String.valueOf(requestId), "error", "Missing intent"));
+        }
+
+        // Step 3: Route to appropriate handler, always scoped to the token's user
         Map<String, Object> response = switch (intent) {
-            case "action.devices.SYNC"    -> smartHomeService.handleSync(requestId);
-            case "action.devices.QUERY"   -> smartHomeService.handleQuery(requestId, inputs);
-            case "action.devices.EXECUTE" -> smartHomeService.handleExecute(requestId, inputs);
+            case "action.devices.SYNC"    -> smartHomeService.handleSync(requestId, userId);
+            case "action.devices.QUERY"   -> smartHomeService.handleQuery(requestId, inputs, userId);
+            case "action.devices.EXECUTE" -> smartHomeService.handleExecute(requestId, inputs, userId);
             default -> {
                 log.warn("Unknown intent received: {}", intent);
-                yield Map.of("requestId", requestId, "error", "Unknown intent: " + intent);
+                yield Map.of("requestId", String.valueOf(requestId), "error", "Unknown intent: " + intent);
             }
         };
 
