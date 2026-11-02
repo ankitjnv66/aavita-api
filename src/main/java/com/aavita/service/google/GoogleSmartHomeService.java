@@ -3,11 +3,7 @@ package com.aavita.service.google;
 import com.aavita.entity.Device;
 import com.aavita.entity.DeviceDigitalPin;
 import com.aavita.entity.Site;
-import com.aavita.entity.User;
-import com.aavita.oauth.repository.OAuthTokenRepository;
 import com.aavita.repository.DeviceRepository;
-import com.aavita.repository.SiteRepository;
-import com.aavita.repository.UserRepository;
 import com.aavita.service.FanService;
 import com.aavita.service.LightService;
 import com.aavita.service.SwitchService;
@@ -21,60 +17,67 @@ import java.util.*;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("unchecked")
 public class GoogleSmartHomeService {
 
     private final LightService          lightService;
     private final FanService            fanService;
     private final ThermostatService     thermostatService;
-    private final SwitchService         switchService;          // NEW
+    private final SwitchService         switchService;
     private final DeviceRepository      deviceRepository;
-    private final SiteRepository        siteRepository;
-    private final UserRepository        userRepository;
-    private final OAuthTokenRepository  oAuthTokenRepository;
 
     // Device type constants — must match your device_type column values
     private static final byte DEVICE_TYPE_LIGHT      = 1;
     private static final byte DEVICE_TYPE_FAN        = 2;
     private static final byte DEVICE_TYPE_THERMOSTAT = 3;
-    private static final byte DEVICE_TYPE_SWITCH     = 4;  // NEW — multi-pin GPIO controller
+    private static final byte DEVICE_TYPE_SWITCH     = 4;  // multi-pin GPIO controller
 
     // =================================================================
-    // INTENT 1: SYNC
+    // INTENT 1: SYNC — only the token owner's devices
     // =================================================================
-    public Map<String, Object> handleSync(String requestId) {
-        log.info("Handling SYNC for requestId: {}", requestId);
-        String userId = "user-001";
+    public Map<String, Object> handleSync(String requestId, Long userId) {
+        log.info("Handling SYNC for requestId: {} userId: {}", requestId, userId);
+        String agentUserId = "user-" + userId;
         List<Map<String, Object>> devices = buildDeviceListForUser(userId);
         return Map.of(
                 "requestId", requestId,
                 "payload", Map.of(
-                        "agentUserId", userId,
+                        "agentUserId", agentUserId,
                         "devices", devices
                 )
         );
     }
 
     // =================================================================
-    // INTENT 2: QUERY
+    // INTENT 2: QUERY — only the token owner's devices
     // =================================================================
-    public Map<String, Object> handleQuery(String requestId, List<Map<String, Object>> inputs) {
-        log.info("Handling QUERY for requestId: {}", requestId);
+    public Map<String, Object> handleQuery(String requestId, List<Map<String, Object>> inputs, Long userId) {
+        log.info("Handling QUERY for requestId: {} userId: {}", requestId, userId);
         Map<String, Object> payload = (Map<String, Object>) inputs.get(0).get("payload");
         List<Map<String, Object>> requestedDevices = (List<Map<String, Object>>) payload.get("devices");
 
         Map<String, Object> deviceStates = new HashMap<>();
         for (Map<String, Object> device : requestedDevices) {
             String deviceId = (String) device.get("id");
+            if (!isOwnedBy(deviceId, userId)) {
+                log.warn("QUERY denied: device {} is not owned by userId {}", deviceId, userId);
+                deviceStates.put(deviceId, Map.of(
+                        "online",    false,
+                        "status",    "ERROR",
+                        "errorCode", "deviceNotFound"
+                ));
+                continue;
+            }
             deviceStates.put(deviceId, getCurrentState(deviceId));
         }
         return Map.of("requestId", requestId, "payload", Map.of("devices", deviceStates));
     }
 
     // =================================================================
-    // INTENT 3: EXECUTE
+    // INTENT 3: EXECUTE — only the token owner's devices
     // =================================================================
-    public Map<String, Object> handleExecute(String requestId, List<Map<String, Object>> inputs) {
-        log.info("Handling EXECUTE for requestId: {}", requestId);
+    public Map<String, Object> handleExecute(String requestId, List<Map<String, Object>> inputs, Long userId) {
+        log.info("Handling EXECUTE for requestId: {} userId: {}", requestId, userId);
         Map<String, Object> payload = (Map<String, Object>) inputs.get(0).get("payload");
         List<Map<String, Object>> commands = (List<Map<String, Object>>) payload.get("commands");
         List<Map<String, Object>> results = new ArrayList<>();
@@ -85,6 +88,18 @@ public class GoogleSmartHomeService {
 
             for (Map<String, Object> device : devices) {
                 String deviceId = (String) device.get("id");
+
+                // Ownership check: never send a command for a device the token owner does not own
+                if (!isOwnedBy(deviceId, userId)) {
+                    log.warn("EXECUTE denied: device {} is not owned by userId {}", deviceId, userId);
+                    results.add(Map.of(
+                            "ids",       List.of(String.valueOf(deviceId)),
+                            "status",    "ERROR",
+                            "errorCode", "deviceNotFound"
+                    ));
+                    continue;
+                }
+
                 for (Map<String, Object> exec : execution) {
                     String cmdName = (String) exec.get("command");
                     Map<String, Object> params = (Map<String, Object>) exec.getOrDefault("params", Map.of());
@@ -110,23 +125,39 @@ public class GoogleSmartHomeService {
     }
 
     // =================================================================
+    // PRIVATE — Ownership helpers
+    // =================================================================
+
+    /**
+     * Google IDs look like "light-7", "fan-3", "thermostat-2" or "switch-4-5".
+     * The database device id is always the number right after the first dash.
+     */
+    private Optional<Long> parseDeviceId(String googleId) {
+        if (googleId == null) return Optional.empty();
+        String[] parts = googleId.split("-");
+        if (parts.length < 2) return Optional.empty();
+        try {
+            return Optional.of(Long.parseLong(parts[1]));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean isOwnedBy(String googleId, Long userId) {
+        Optional<Long> dbId = parseDeviceId(googleId);
+        return dbId.isPresent() && deviceRepository.existsByIdAndUser_Id(dbId.get(), userId);
+    }
+
+    // =================================================================
     // PRIVATE — Build device list from DB
     // =================================================================
-    private List<Map<String, Object>> buildDeviceListForUser(String userId) {
+    private List<Map<String, Object>> buildDeviceListForUser(Long userId) {
         List<Map<String, Object>> devices = new ArrayList<>();
         try {
-            Long userIdLong = Long.parseLong(userId.replace("user-", ""));
-            Optional<User> userOpt = userRepository.findById(userIdLong);
-            if (userOpt.isEmpty()) {
-                log.warn("User not found for userId: {}", userId);
-                return devices;
-            }
-            List<Site> sites = siteRepository.findByUser_Id(userIdLong);
-            for (Site site : sites) {
-                List<Device> siteDevices = deviceRepository.findBySiteIdWithDigitalPins(site.getSiteId());
-                for (Device device : siteDevices) {
-                    devices.addAll(buildGoogleDevices(device, site));
-                }
+            List<Device> userDevices = new ArrayList<>(deviceRepository.findAllByUserIdWithPins(userId));
+            userDevices.sort(Comparator.comparing(Device::getId));
+            for (Device device : userDevices) {
+                devices.addAll(buildGoogleDevices(device, device.getSite()));
             }
             log.info("SYNC: Found {} Google Home devices for userId: {}", devices.size(), userId);
         } catch (Exception e) {
@@ -137,7 +168,7 @@ public class GoogleSmartHomeService {
 
     /**
      * Returns a List because DEVICE_TYPE_SWITCH expands into N entries (one per digital pin),
-     * while Light/Fan/Thermostat each return exactly one entry (existing behaviour unchanged).
+     * while Light/Fan/Thermostat each return exactly one entry.
      */
     private List<Map<String, Object>> buildGoogleDevices(Device device, Site site) {
         if (device.getDeviceType() == DEVICE_TYPE_SWITCH) {
@@ -197,7 +228,7 @@ public class GoogleSmartHomeService {
         return result;
     }
 
-    // Existing single-device builder — UNCHANGED for Light/Fan/Thermostat
+    // Single-device builder for Light/Fan/Thermostat
     private Map<String, Object> buildGoogleDevice(Device device, Site site) {
         byte deviceType = device.getDeviceType();
         String name     = device.getDeviceName() != null ? device.getDeviceName() : getDefaultName(deviceType, device.getId());
@@ -274,14 +305,13 @@ public class GoogleSmartHomeService {
     // PRIVATE — State and command routing
     // =================================================================
     private Map<String, Object> getCurrentState(String deviceId) {
-        // NEW: switch GPIO pins — read DeviceDigitalPin.state from DB
+        // Switch GPIO pins — read DeviceDigitalPin.state from DB
         if (deviceId.startsWith("switch-")) {
             return new HashMap<>(Map.of(
                     "online", true,
                     "on",     switchService.isOn(deviceId)
             ));
         }
-        // Existing — unchanged
         if (deviceId.startsWith("light")) {
             return new HashMap<>(Map.of(
                     "online",            true,
@@ -313,7 +343,7 @@ public class GoogleSmartHomeService {
     private void executeCommand(String deviceId, String command, Map<String, Object> params) {
         log.info("Executing command: {} on device: {} with params: {}", command, deviceId, params);
 
-        // NEW: switch GPIO pin toggle
+        // Switch GPIO pin toggle
         if (deviceId.startsWith("switch-")) {
             if ("action.devices.commands.OnOff".equals(command)) {
                 switchService.setOnOff(deviceId, (Boolean) params.get("on"));
@@ -323,7 +353,6 @@ public class GoogleSmartHomeService {
             return;
         }
 
-        // Existing — UNCHANGED
         if (deviceId.startsWith("light")) {
             switch (command) {
                 case "action.devices.commands.OnOff" ->

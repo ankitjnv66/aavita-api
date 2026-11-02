@@ -23,4 +23,16 @@ public interface DeviceRepository extends JpaRepository<Device, Long> {
 
     @Query("SELECT d FROM Device d LEFT JOIN FETCH d.digitalPins WHERE d.site.siteId = :siteId")
     List<Device> findBySiteIdWithDigitalPins(@Param("siteId") UUID siteId);
+
+    /**
+     * All devices owned by one user (devices.user_id), with digital pins and site loaded.
+     * Used by Google SYNC so it only returns the token owner's devices.
+     */
+    @Query("SELECT DISTINCT d FROM Device d LEFT JOIN FETCH d.digitalPins JOIN FETCH d.site WHERE d.user.id = :userId")
+    List<Device> findAllByUserIdWithPins(@Param("userId") Long userId);
+
+    /**
+     * Ownership check used by Google QUERY and EXECUTE.
+     */
+    boolean existsByIdAndUser_Id(Long id, Long userId);
 }
